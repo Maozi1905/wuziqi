@@ -29,24 +29,31 @@
     min-height: 100%;
     background: radial-gradient(1200px 600px at 50% -10%, #1d2634, var(--bg));
     color: var(--text); font: 15px/1.6 "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-    display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 12px 12px 24px;
+    display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 12px 24px;
   }
   h1 { font-size: 17px; margin: 2px 0 0; font-weight: 600; letter-spacing: .5px; }
   h1 small { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 6px; }
 
   #players { display: flex; gap: 26px; align-items: center; justify-content: center; margin-top: 2px; }
-  .p { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .p { display: flex; flex-direction: column; align-items: center; gap: 1px; }
   .face {
-    width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center;
-    font-size: 26px; line-height: 1; background: #222a35; border: 2px solid var(--line);
+    width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
+    font-size: 25px; line-height: 1; background: #222a35; border: 2px solid var(--line);
     transition: .25s;
   }
   .p.me .face { border-color: var(--accent); }
   .p.peer.hot .face { border-color: var(--ok); box-shadow: 0 0 14px #3fb95088; animation: pop .5s ease; }
   .p.peer.empty .face { color: #56606e; font-size: 20px; }
-  .tag { font-size: 11px; color: var(--muted); }
+  .nick { font-size: 12px; color: var(--text); font-weight: 600; }
   .stoneMark { font-size: 11px; color: var(--accent); min-height: 15px; }
   @keyframes pop { 0% { transform: scale(.6); opacity: .2; } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
+
+  #score {
+    display: none; align-items: center; gap: 10px; font-size: 13px; color: var(--muted);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 4px 14px;
+  }
+  #score.show { display: flex; }
+  #score b { font-size: 16px; color: var(--text); letter-spacing: 1px; }
 
   #status {
     display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted);
@@ -64,6 +71,15 @@
     background: #000a; color: #fff; border-radius: 0 0 10px 10px; display: none; white-space: pre-line;
   }
   #banner.show { display: block; }
+
+  #requestRow {
+    display: none; align-items: center; gap: 8px; width: min(100%, 420px);
+    background: #2a2016; border: 1px solid #6b5220; border-radius: 10px; padding: 8px 12px;
+    font-size: 13px; color: #ffd88a;
+  }
+  #requestRow.show { display: flex; }
+  #requestRow span { flex: 1; }
+  #requestRow button { padding: 6px 12px; font-size: 13px; }
 
   .bar { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
   button {
@@ -99,21 +115,29 @@
   <div id="players">
     <div class="p me" id="meSlot">
       <span class="face" id="myFace">🐳</span>
-      <span class="tag">我</span>
+      <span class="nick" id="myNickLabel">我</span>
       <span class="stoneMark" id="myMark"></span>
     </div>
     <div class="p peer empty" id="peerSlot">
       <span class="face" id="peerFace">?</span>
-      <span class="tag">对方</span>
+      <span class="nick" id="peerNickLabel">对方</span>
       <span class="stoneMark" id="peerMark"></span>
     </div>
   </div>
+
+  <div id="score"><span id="scoreMe">—</span><b id="scoreNum">0 : 0</b><span id="scorePeer">—</span></div>
 
   <div id="status"><span id="dot"></span><span id="statusText">本地同屏：两人轮流点棋盘</span></div>
 
   <div id="boardWrap">
     <canvas id="board"></canvas>
     <div id="banner"></div>
+  </div>
+
+  <div id="requestRow">
+    <span id="requestText">对方想新开一局</span>
+    <button id="btnAgree" class="primary">同意</button>
+    <button id="btnDecline">拒绝</button>
   </div>
 
   <div class="bar">
@@ -133,7 +157,7 @@
     <div class="row" id="hostRow" style="display:none">
       <button id="btnCreate" class="primary" style="flex:1">创建房间</button>
     </div>
-    <p class="hint" id="netHint">一台设备创建房间，另一台输入 5 位房间号加入。颜色连上后随机决定。</p>
+    <p class="hint" id="netHint">一台设备创建房间，另一台输入 5 位房间号加入。每局颜色随机。</p>
   </div>
 
   <div id="log"></div>
@@ -141,9 +165,10 @@
 <script>
 window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
 (() => {
-  const N = 20;
+  const N = 15;
   const EMPTY = 0, BLACK = 1, WHITE = 2;
-  const AVATARS = ['🐳', '🐱', '🐶', '🦊', '🐼', '🐰', '🦁', '🐯', '🐨', '🐸', '🐵', '🦄'];
+  const AVATARS = ['🐳', '🐱', '🐶', '🦊', '🐼', '🐰', '🦁', '🐯', '🐨', '🐸'];
+  const NICKNAMES = ['小兔子', '土豆', '小狗', '西红柿', '小猫', '青椒', '豆腐', '西瓜', '蘑菇', '团子'];
   const BROKER = { host: 'broker.emqx.io', port: 8084, path: '/mqtt' };
   const TOPIC_PREFIX = 'xjy-gomoku-v1/';
 
@@ -158,6 +183,13 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
   const peerSlot = document.getElementById('peerSlot');
   const myMark = document.getElementById('myMark');
   const peerMark = document.getElementById('peerMark');
+  const myNickLabel = document.getElementById('myNickLabel');
+  const peerNickLabel = document.getElementById('peerNickLabel');
+  const scoreBox = document.getElementById('score');
+  const scoreMe = document.getElementById('scoreMe');
+  const scorePeer = document.getElementById('scorePeer');
+  const scoreNum = document.getElementById('scoreNum');
+  const requestRow = document.getElementById('requestRow');
 
   let cell = 32, pad = 22, dpr = Math.min(devicePixelRatio || 1, 2);
   let board = Array.from({ length: N }, () => Array(N).fill(EMPTY));
@@ -167,13 +199,17 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
   let mode = 'local';
   let myColor = null;
   let myAvatar = AVATARS[Math.floor(Math.random() * AVATARS.length)];
-  let peerAvatar = null;
+  let myNick = NICKNAMES[Math.floor(Math.random() * NICKNAMES.length)];
+  let peerAvatar = null, peerNick = null;
+  let score = { mine: 0, theirs: 0 };
+  let pendingRestart = false, peerWantsRestart = false;
   let client = null, topic = null, myCode = null;
   let audioCtx = null;
   let winAnim = null;
   const myId = 'g' + Math.random().toString(36).slice(2, 10);
 
   myFace.textContent = myAvatar;
+  myNickLabel.textContent = myNick;
 
   // ---------- 声音 ----------
   function ensureAudio() {
@@ -200,7 +236,6 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
   function soundJoin() { ensureAudio(); tone(660, 0, 0.16, 0.18); tone(880, 0.14, 0.22, 0.16); }
   function soundLeave() { ensureAudio(); tone(420, 0, 0.18, 0.14); tone(300, 0.16, 0.25, 0.12); }
 
-  // 落子：短促的木头"啪" —— 一段衰减噪声 + 一点低频
   function soundPlace() {
     const ac = ensureAudio();
     if (!ac) return;
@@ -208,37 +243,47 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
     const buffer = ac.createBuffer(1, Math.floor(ac.sampleRate * dur), ac.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < data.length; i += 1) {
-      const decay = Math.pow(1 - i / data.length, 6);
-      data[i] = (Math.random() * 2 - 1) * decay;
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 6);
     }
     const src = ac.createBufferSource();
     src.buffer = buffer;
     const filter = ac.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.frequency.value = 1800;
-    filter.Q.value = 0.9;
-    const gain = ac.createGain();
-    gain.gain.value = 0.5;
+    filter.type = 'bandpass'; filter.frequency.value = 1800; filter.Q.value = 0.9;
+    const gain = ac.createGain(); gain.gain.value = 0.5;
     src.connect(filter).connect(gain).connect(ac.destination);
     src.start();
     tone(180, 0, 0.06, 0.12);
   }
 
-  // 胜利：上行琶音 + 收尾和弦
   function soundWin() {
     const ac = ensureAudio();
     if (!ac) return;
-    const notes = [523.25, 659.25, 783.99, 1046.5];
-    notes.forEach((f, i) => tone(f, 0.12 * i, 0.35, 0.16));
+    [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, 0.12 * i, 0.35, 0.16));
     tone(1318.5, 0.5, 0.9, 0.12);
     tone(783.99, 0.5, 0.9, 0.10);
     tone(1046.5, 0.5, 1.1, 0.10);
   }
 
+  // 新开一局：清脆的上行两声
+  function soundRestart() {
+    const ac = ensureAudio();
+    if (!ac) return;
+    tone(587.33, 0, 0.18, 0.16);
+    tone(880, 0.13, 0.3, 0.14);
+  }
+
+  // 拒绝/被拒绝：短促下沉
+  function soundDecline() {
+    const ac = ensureAudio();
+    if (!ac) return;
+    tone(392, 0, 0.16, 0.14);
+    tone(311.13, 0.15, 0.24, 0.12);
+  }
+
   // ---------- 渲染 ----------
   function layout() {
     const maxW = Math.min(window.innerWidth - 24, 560);
-    const maxH = window.innerHeight - 330;
+    const maxH = window.innerHeight - 360;
     const size = Math.max(240, Math.min(maxW, maxH));
     cell = Math.floor((size - 2 * 18) / (N - 1));
     pad = Math.round((size - cell * (N - 1)) / 2);
@@ -264,7 +309,7 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
       ctx.beginPath(); ctx.moveTo(pad, p); ctx.lineTo(pad + (N - 1) * cell, p); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(p, pad); ctx.lineTo(p, pad + (N - 1) * cell); ctx.stroke();
     }
-    const stars = [[3,3],[3,16],[16,3],[16,16],[9,9],[10,10]];
+    const stars = [[3,3],[3,11],[11,3],[11,11],[7,7]];
     ctx.fillStyle = 'rgba(90,60,15,.75)';
     for (const [x, y] of stars) {
       ctx.beginPath(); ctx.arc(pad + x * cell, pad + y * cell, Math.max(2, cell * .08), 0, 7); ctx.fill();
@@ -353,6 +398,7 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
       winLine = line; over = true;
       beginWinAnim(line);
       soundWin();
+      recordWin(color);
       showBanner((color === BLACK ? '黑棋' : '白棋') + '连五，赢啦 🎉');
     } else if (moves.length === N * N) {
       over = true; showBanner('棋盘满了，平局');
@@ -365,6 +411,23 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
   function showBanner(text) { banner.textContent = text; banner.classList.add('show'); }
   function hideBanner() { banner.classList.remove('show'); banner.textContent = ''; }
   function colorName(c) { return c === BLACK ? '黑' : '白'; }
+
+  function recordWin(color) {
+    if (mode === 'local') return;
+    if (color === myColor) score.mine += 1;
+    else score.theirs += 1;
+    renderScore();
+  }
+
+  function renderScore() {
+    if (mode === 'local') { scoreBox.classList.remove('show'); return; }
+    const me = myNick || '我';
+    const peer = peerNick || '对方';
+    scoreMe.textContent = me;
+    scorePeer.textContent = peer;
+    scoreNum.textContent = `${score.mine} : ${score.theirs}`;
+    scoreBox.classList.add('show');
+  }
 
   function updateStatus() {
     if (over) return;
@@ -384,6 +447,8 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
     peerMark.textContent = peerAvatar && myColor ? `● ${myColor === BLACK ? '白' : '黑'}棋` : '';
     myMark.style.color = myColor === WHITE ? '#e6edf3' : 'var(--accent)';
     peerMark.style.color = myColor === BLACK ? '#e6edf3' : 'var(--accent)';
+    myNickLabel.textContent = myNick || '我';
+    peerNickLabel.textContent = peerNick || '对方';
   }
 
   // ---------- 交互 ----------
@@ -408,13 +473,14 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
     send({ t: 'move', x: p.x, y: p.y });
   });
 
-  function flash(text) { logEl.textContent = text; clearTimeout(flash.t); flash.t = setTimeout(() => logEl.textContent = '', 2000); }
+  function flash(text) { logEl.textContent = text; clearTimeout(flash.t); flash.t = setTimeout(() => logEl.textContent = '', 2200); }
 
   // ---------- 局面 ----------
   function resetBoard(silent) {
     board = Array.from({ length: N }, () => Array(N).fill(EMPTY));
     turn = BLACK; over = false; winLine = null; lastMove = null; moves = [];
     undoLeft = 1;
+    if (winAnim) { clearInterval(beginWinAnim.timer); winAnim = null; }
     hideBanner(); draw(); updateStatus(); refreshUndoButton();
     if (!silent) logEl.textContent = '';
   }
@@ -434,10 +500,51 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
     draw(); updateStatus(); refreshUndoButton();
   }
 
+  function refreshRestartButton() {
+    const btn = document.getElementById('btnRestart');
+    if (pendingRestart) { btn.textContent = '等对方同意…'; btn.disabled = true; }
+    else { btn.textContent = '新开一局'; btn.disabled = false; }
+  }
+
   document.getElementById('btnRestart').onclick = () => {
-    resetBoard();
-    send({ t: 'restart' });
-    flash('新开一局，黑棋先行');
+    ensureAudio();
+    soundRestart();
+    if (mode === 'local') {
+      resetBoard();
+      flash('新开一局，黑棋先行');
+      return;
+    }
+    if (!myColor || pendingRestart) return;
+    if (peerWantsRestart) {          // 两边都想开，直接同意
+      peerWantsRestart = false;
+      requestRow.classList.remove('show');
+      send({ t: 'restart-agree' });
+      if (mode === 'host') hostRestart();
+      else { pendingRestart = true; refreshRestartButton(); }
+      return;
+    }
+    pendingRestart = true;
+    refreshRestartButton();
+    send({ t: 'restart-request' });
+    flash('已发出请求，等对方同意…');
+  };
+
+  document.getElementById('btnAgree').onclick = () => {
+    ensureAudio();
+    soundRestart();
+    peerWantsRestart = false;
+    requestRow.classList.remove('show');
+    send({ t: 'restart-agree' });
+    if (mode === 'host') hostRestart();
+    else { pendingRestart = true; refreshRestartButton(); flash('已同意，等对方开局…'); }
+  };
+
+  document.getElementById('btnDecline').onclick = () => {
+    soundDecline();
+    peerWantsRestart = false;
+    requestRow.classList.remove('show');
+    send({ t: 'restart-decline' });
+    flash('已拒绝，继续当前对局');
   };
 
   document.getElementById('btnUndo').onclick = () => {
@@ -457,14 +564,16 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
 
   document.getElementById('btnResign').onclick = () => {
     if (over) return;
+    if (mode !== 'local' && !myColor) return;
     const loser = mode === 'local' ? turn : myColor;
     over = true;
+    recordWin(loser === BLACK ? WHITE : BLACK);
     showBanner((mode === 'local' ? (turn === BLACK ? '黑棋' : '白棋') : '你') + '认输，这局结束');
     send({ t: 'resign', color: loser });
     updateStatus();
   };
 
-  // ---------- 联机（MQTT 中转，不走 P2P） ----------
+  // ---------- 联机（MQTT 中转） ----------
   const netBox = document.getElementById('net');
   const codeEl = document.getElementById('code');
   const hostRow = document.getElementById('hostRow');
@@ -497,10 +606,7 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
     return new Promise((resolve, reject) => {
       const c = mqtt.connect('wss://' + BROKER.host + ':' + BROKER.port + BROKER.path, {
         clientId: 'xjy-' + code + '-' + myId,
-        clean: true,
-        connectTimeout: 9000,
-        reconnectPeriod: 0,
-        keepalive: 30,
+        clean: true, connectTimeout: 9000, reconnectPeriod: 0, keepalive: 30,
       });
       client = c;
       let settled = false;
@@ -517,7 +623,7 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
     });
   }
 
-  function startMatch() {
+  function startMatch(firstGame) {
     netBox.classList.remove('show');
     hostRow.style.display = 'none';
     joinRow.style.display = 'none';
@@ -526,27 +632,41 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
     peerSlot.classList.add('hot');
     peerFace.textContent = peerAvatar || '🙂';
     refreshMarks();
+    renderScore();
     updateStatus();
-    showBanner(`连上了！你执${colorName(myColor)}${myColor === BLACK ? ' · 你先下' : ' · 对方先下'}`);
-    setTimeout(hideBanner, 2600);
+    if (firstGame) {
+      showBanner(`连上了！你执${colorName(myColor)}${myColor === BLACK ? ' · 你先下' : ' · 对方先下'}`);
+      setTimeout(hideBanner, 2600);
+    }
+  }
+
+  function hostRestart() {
+    soundRestart();
+    myColor = Math.random() < 0.5 ? BLACK : WHITE;
+    send({ t: 'restart-go', color: myColor });
+    resetBoard(true);
+    refreshMarks(); renderScore(); updateStatus();
+    showBanner(`新一局：你执${colorName(myColor)}${myColor === BLACK ? ' · 你先下' : ' · 对方先下'}`);
+    setTimeout(hideBanner, 2400);
   }
 
   document.getElementById('btnCreate').onclick = async () => {
     ensureAudio();
     myCode = randomCode();
     mode = 'host';
+    score = { mine: 0, theirs: 0 };
     codeEl.style.display = 'block';
     codeEl.textContent = myCode;
-    netHint.textContent = '把上面的 5 位数字念给对方，她输入后就能连上。颜色连上后随机决定。';
+    netHint.textContent = '把上面的 5 位数字念给对方，她输入后就能连上。每局颜色随机。';
     setNetState('wait', '正在连服务器…');
     try {
       await connectBroker(myCode);
-      send({ t: 'open', avatar: myAvatar });
+      send({ t: 'open', avatar: myAvatar, nick: myNick });
       setNetState('wait', '房间里等对方进来…房间号 ' + myCode);
       client.on('message', (_t, payload) => handleMessage(payload));
     } catch (err) {
       setNetState('err', '连不上中转服务器：' + (err.message || err));
-      netHint.textContent = '这台设备连不上 broker.emqx.io。换手机热点/换网络再试；还不行就是被网络拦了。';
+      netHint.textContent = '这台设备连不上 broker.emqx.io。换网络再试；还不行就是被拦了。';
     }
   };
 
@@ -556,10 +676,11 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
     if (!/^\d{5}$/.test(code)) { flash('房间号是 5 位数字'); return; }
     mode = 'guest';
     myCode = code;
+    score = { mine: 0, theirs: 0 };
     setNetState('wait', '正在连服务器…');
     try {
       await connectBroker(code);
-      send({ t: 'join', avatar: myAvatar });
+      send({ t: 'join', avatar: myAvatar, nick: myNick });
       setNetState('wait', '已连上，等对方确认…');
       client.on('message', (_t, payload) => handleMessage(payload));
       setTimeout(() => {
@@ -580,24 +701,66 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
 
     if (m.t === 'join') {
       if (mode !== 'host' || myColor) return;
+      peerNick = m.nick || '对方';
       peerAvatar = m.avatar || '🙂';
+      if (peerNick === myNick) {          // 重名就换一个，避免比分板认不出谁
+        const pool = NICKNAMES.filter((n) => n !== peerNick);
+        myNick = pool[Math.floor(Math.random() * pool.length)];
+        refreshMarks();
+      }
       soundJoin();
       myColor = Math.random() < 0.5 ? BLACK : WHITE;
-      send({ t: 'start', color: myColor, avatar: myAvatar });
-      startMatch();
+      send({ t: 'start', color: myColor, avatar: myAvatar, nick: myNick });
+      startMatch(true);
     } else if (m.t === 'start') {
       if (mode !== 'guest' || myColor) return;
+      peerNick = m.nick || '对方';
       peerAvatar = m.avatar || '🙂';
       myColor = m.color === BLACK ? WHITE : BLACK;
       soundJoin();
-      startMatch();
+      startMatch(true);
     } else if (m.t === 'move') {
       if (!myColor || over) return;
       if (!board[m.y] || board[m.y][m.x] !== EMPTY) return;
       place(m.x, m.y, turn);
-    } else if (m.t === 'restart') {
+    } else if (m.t === 'restart-request') {
       if (!myColor) return;
+      peerWantsRestart = true;
+      if (pendingRestart) {           // 同时都想开
+        pendingRestart = false;
+        peerWantsRestart = false;
+        refreshRestartButton();
+        send({ t: 'restart-agree' });
+        if (mode === 'host') hostRestart();
+        else { pendingRestart = true; refreshRestartButton(); }
+        return;
+      }
+      document.getElementById('requestText').textContent = `${peerNick || '对方'} 想新开一局`;
+      requestRow.classList.add('show');
+    } else if (m.t === 'restart-agree') {
+      peerWantsRestart = false;
+      requestRow.classList.remove('show');
+      if (mode === 'host') {
+        pendingRestart = false;
+        refreshRestartButton();
+        hostRestart();
+      }
+    } else if (m.t === 'restart-decline') {
+      soundDecline();
+      pendingRestart = false;
+      refreshRestartButton();
+      requestRow.classList.remove('show');
+      flash('对方拒绝了，继续当前对局');
+    } else if (m.t === 'restart-go') {
+      soundRestart();
+      myColor = m.color === BLACK ? WHITE : BLACK;
+      pendingRestart = false;
+      refreshRestartButton();
+      requestRow.classList.remove('show');
       resetBoard(true);
+      refreshMarks(); renderScore(); updateStatus();
+      showBanner(`新一局：你执${colorName(myColor)}${myColor === BLACK ? ' · 你先下' : ' · 对方先下'}`);
+      setTimeout(hideBanner, 2400);
     } else if (m.t === 'undo') {
       if (!myColor || !moves.length) return;
       if (undoLeft > 0) undoLeft -= 1;
@@ -606,6 +769,7 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
     } else if (m.t === 'resign') {
       if (!myColor) return;
       over = true;
+      recordWin(myColor);
       showBanner('对方认输，你赢了 🎉');
     } else if (m.t === 'bye') {
       setNetState('err', '对方离开了');
@@ -613,6 +777,7 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
       peerSlot.classList.remove('hot');
       peerFace.textContent = '?';
       peerMark.textContent = '';
+      peerNickLabel.textContent = '对方';
       soundLeave();
     }
   }
@@ -625,9 +790,10 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
   layout();
   updateStatus();
   refreshUndoButton();
+  refreshRestartButton();
 
   window.__gomoku = {
-    state: () => ({ mode, turn, over, moves: moves.length, myColor, peerAvatar, undoLeft, winLine, connected: Boolean(client && client.connected) }),
+    state: () => ({ mode, turn, over, moves: moves.length, myColor, myNick, peerNick, peerAvatar, undoLeft, winLine, score: { ...score }, connected: Boolean(client && client.connected) }),
     reset: () => resetBoard(true),
     board: () => board.map((r) => r.join('')).join('/'),
     place: (x, y, color) => place(x, y, color || turn),
