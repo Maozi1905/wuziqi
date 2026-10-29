@@ -195,7 +195,7 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
   let board = Array.from({ length: N }, () => Array(N).fill(EMPTY));
   let turn = BLACK, over = false, winLine = null, lastMove = null;
   let moves = [];
-  let undoLeft = 1;
+  let undoLeft = { 1: 1, 2: 1 };   // 每方各一次，互不影响
   let mode = 'local';
   let myColor = null;
   let myAvatar = AVATARS[Math.floor(Math.random() * AVATARS.length)];
@@ -399,7 +399,7 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
       beginWinAnim(line);
       soundWin();
       recordWin(color);
-      showBanner((color === BLACK ? '黑棋' : '白棋') + '连五，赢啦 🎉');
+      showBanner(winText(color));
     } else if (moves.length === N * N) {
       over = true; showBanner('棋盘满了，平局');
     } else {
@@ -411,6 +411,13 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
   function showBanner(text) { banner.textContent = text; banner.classList.add('show'); }
   function hideBanner() { banner.classList.remove('show'); banner.textContent = ''; }
   function colorName(c) { return c === BLACK ? '黑' : '白'; }
+
+  // 胜利文案按“我”的视角说，别让输家也看到“赢啦”
+  function winText(color) {
+    const who = color === BLACK ? '黑棋' : '白棋';
+    if (mode === 'local') return `${who}连五，本局结束`;
+    return color === myColor ? `你（${who}）连五，赢啦 🎉` : `对方（${who}）连五，你输啦`;
+  }
 
   function recordWin(color) {
     if (mode === 'local') return;
@@ -479,7 +486,7 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
   function resetBoard(silent) {
     board = Array.from({ length: N }, () => Array(N).fill(EMPTY));
     turn = BLACK; over = false; winLine = null; lastMove = null; moves = [];
-    undoLeft = 1;
+    undoLeft = { 1: 1, 2: 1 };
     if (winAnim) { clearInterval(beginWinAnim.timer); winAnim = null; }
     hideBanner(); draw(); updateStatus(); refreshUndoButton();
     if (!silent) logEl.textContent = '';
@@ -487,8 +494,9 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
 
   function refreshUndoButton() {
     const btn = document.getElementById('btnUndo');
-    btn.textContent = undoLeft > 0 ? '悔棋 · 1' : '悔棋 · 用完';
-    btn.disabled = undoLeft <= 0;
+    const left = mode === 'local' ? (undoLeft[BLACK] || 0) + (undoLeft[WHITE] || 0) : (undoLeft[myColor] || 0);
+    btn.textContent = left > 0 ? `悔棋 · ${left}` : '悔棋 · 用完';
+    btn.disabled = left <= 0;
   }
 
   function applyUndo() {
@@ -555,11 +563,14 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
       if (turn === myColor) { flash('等对方落子后才能悔棋'); return; }
       if (last.color !== myColor) { flash('只能悔自己刚下的那手'); return; }
     }
-    if (undoLeft <= 0) { flash('这局已经悔过了，一局只有一次'); return; }
-    undoLeft -= 1;
+    if ((undoLeft[last.color] || 0) <= 0) {
+      flash((last.color === BLACK ? '黑棋' : '白棋') + '这局已经悔过了');
+      return;
+    }
+    undoLeft[last.color] -= 1;
     applyUndo();
     send({ t: 'undo', color: last.color });
-    flash('悔棋一次，这局不能再悔了');
+    flash((last.color === BLACK ? '黑棋' : '白棋') + '悔棋一次，这局不能再悔');
   };
 
   document.getElementById('btnResign').onclick = () => {
@@ -763,9 +774,10 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
       setTimeout(hideBanner, 2400);
     } else if (m.t === 'undo') {
       if (!myColor || !moves.length) return;
-      if (undoLeft > 0) undoLeft -= 1;
+      const color = m.color || moves.at(-1).color;
+      if ((undoLeft[color] || 0) > 0) undoLeft[color] -= 1;
       applyUndo();
-      flash('对方悔棋一次');
+      flash((color === BLACK ? '黑棋' : '白棋') + '悔棋一次');
     } else if (m.t === 'resign') {
       if (!myColor) return;
       over = true;
@@ -797,6 +809,14 @@ window.onerror = (m, s, l) => { document.title = 'ERR ' + m + ' @' + l; };
     reset: () => resetBoard(true),
     board: () => board.map((r) => r.join('')).join('/'),
     place: (x, y, color) => place(x, y, color || turn),
+    // 与真实点击同一条路径（含发送），供联机自测使用
+    move: (x, y) => {
+      if (over || !board[y] || board[y][x] !== EMPTY) return false;
+      if (mode !== 'local' && (!myColor || turn !== myColor)) return false;
+      place(x, y, turn);
+      send({ t: 'move', x, y });
+      return true;
+    },
     anim: () => (winAnim ? { age: Math.round(performance.now() - winAnim.start), stones: winAnim.stones.length } : null),
     scaleAt: (x, y) => stoneScale(x, y, performance.now()),
   };
